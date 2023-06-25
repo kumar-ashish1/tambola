@@ -1,46 +1,241 @@
-<html>
-   <head>
-      
-      <script type = "text/javascript">
-         function WebSocketTest() {
-            
-            if ("WebSocket" in window) {
-               alert("WebSocket is supported by your Browser!");
-               
-               // Let us open a web socket
-               var ws = new WebSocket("ws://localhost:9998/echo");
-				
-               ws.onopen = function() {
-                  
-                  // Web Socket is connected, send data using send()
-                  ws.send("Message to send");
-                  alert("Message is sent...");
-               };
-				
-               ws.onmessage = function (evt) { 
-                  var received_msg = evt.data;
-                  alert("Message is received...");
-               };
-				
-               ws.onclose = function() { 
-                  
-                  // websocket is closed.
-                  alert("Connection is closed..."); 
-               };
-            } else {
-              
-               // The browser doesn't support WebSocket
-               alert("WebSocket NOT supported by your Browser!");
-            }
-         }
-      </script>
-		
-   </head>
+const fs = require("fs");
+const path = require("path");
+const https = require("https");
+const express = require("express");
+
+const {
+  userJoin,
+  getCurrentUser,
+  userLeave,
+  getRoomUsers,
+  wasHost,
+  isThereAHost,
+  hasGameStarted,
+  startGame,
+} = require("./utils/users");
+
+let goneNumbers = [];
+
+var privateKey = fs.readFileSync( 'sslcerts/private.key' );
+var certificate = fs.readFileSync( 'sslcerts/certificate.crt' );
+
+const sslConfig = {
+  key: privateKey,
+  cert: certificate
+};
+
+const app = express();
+const server = https.createServer(sslConfig,app);
+var io = require("socket.io")(server, { pingTimeout: 240000 });
+
+io.on("connection", (socket) => {
+  // joining a room
+  socket.on("joinRoom", ({ username,emp_code, room }) => {
+    const user = userJoin(socket.id,emp_code, username, room);
+    console.log("type",socket.conn.transport.name);
+
+    if(username == "Host")
+       goneNumbers = [];
+
+    // joining the user in the room
+    socket.join(user.room);
+
+    const uroom = io.of("/").adapter.rooms.get(user.room);
+    io.to(user.room).emit('numOfUsers',uroom.size);
+
+    // events emitted for new connection
+    const len = getRoomUsers(user.room);
+    if (len == 1) {
+      socket.emit("userConnected", { type: "Host" });
+    } else {
+      if (hasGameStarted(user.room)) {
+        socket.emit("gameHasAlreadyStarted");
+      } else {
+        socket.emit("userConnected", { type: "PC" });
+      }
+
+      // Let host know who joined
+      io.to(user.room).emit("notifyHostConnection", user);
+    }
+
+    // if a room has more than one connections but no host, give out a message
+    // if (len > 1 && !isThereAHost(user.room) ) {
+    //   io.to(user.room).emit("HostDisconnected", user);
+    // }
+
+    // Welcome current user
+    console.log(
+      "Hi",
+      user.username,
+      "id:",
+      user.id,
+      "Room id:",
+      user.room,
+      "Connection number:",
+      len
+    );
+  });
+
+  // winning call made
+  socket.on("callWinFromPC", ({ callWinType, houses }) => {
+    const user = getCurrentUser(socket.id);
+
+    // call for host (just send to host)?
+    // right now notifications are directly generated from this object on PC's screen
+    if (user) {
+     
+      io.to(user.room).emit("callWinToHost", { callWinType, houses, user,goneNumbers});
+      console.log(callWinType, "from", user.username, "in room:", user.room);
+    } else {
+      console.log("ISSUE: win call coming from null user");
+    }
+  });
+
+  // results from host
+  socket.on("resultsFromHost", ({ result, callWinType, userCalledForWin }) => {
+    let user = getCurrentUser(socket.id);
+
+    if (user) {
+      const room = user.room;
+
+      // call to PCs notifying someone won something
+      let calledWinUserEmpCode = userCalledForWin.emp_code;
+      let calledWinUsername = userCalledForWin.username;
+      console.log(
+        result,
+        "on",
+        calledWinUsername,
+        "for",
+        callWinType,
+        "in room:",
+        room
+      );
+      io.to(room).emit("resultsForPC", {
+        result,
+        callWinType,
+        calledWinUsername,
+        calledWinUserEmpCode,
+      });
+    } else {
+      console.log("ISSUE: results coming from null host");
+    }
+  });
+
+  // events for host calling number from front-end button click
+  socket.on("newNumber", (num) => {
+    const user = getCurrentUser(socket.id);
+
+    // event for notifying PCs that new number was called
+    if (user) {
+      goneNumbers.push(num);
+      io.to(user.room).emit("newNumberFromHost", { newNumber: num });
+      console.log("newNumberFromHost:", num, "in room:", user.room);
+    } else {
+      console.log("ISSUE: new number coming from null user");
+    }
+  });
+
+  socket.on("GameFinished",()=>{
+    const user = getCurrentUser(socket.id);
+    io.to(user.room).emit("GameFinished");
+  })
+
+  // receiver for Host Config done and emitter for Host Config done
+  socket.on("HostConfigDone", (awards) => {
+    const user = getCurrentUser(socket.id);
+
+    if (user) {
+      console.log("HostConfigDone:", user.username);
+      startGame(user.room);
+      io.to(user.room).emit("HostConfigDone", awards);
+    } else {
+      console.log("ISSUE: Host Config attempted with null user");
+    }
+  });
+
+  // Know when a player is ready with number of tickets he is going to play with
+  socket.on("PcReady", (numHouses) => {
+    const user = getCurrentUser(socket.id);
+
+    // Let host know that the player is ready
+    if (user) {
+      io.to(user.room).emit("PcReady", user, numHouses);
+    } else {
+      console.log("ISSUE: PcReady coming from null user");
+    }
+  });
+
+  socket.on("PcsStatus", (user, PcsStatus) => {
+    console.log("readyPlayers", PcsStatus);
+    if (user) {
+      io.to(user.room).emit("PcsStatus", PcsStatus);
+    }
+  });
+
+  socket.on("hostCompletedChecking", () => {
+    const user = getCurrentUser(socket.id);
+    if (user) {
+      io.to(user.room).emit("hostCompletedChecking");
+    } else {
+      console.log("ISSUE: hostCompletedChecking coming from null user");
+    }
+  });
+
+  socket.on("showTimer", () => {
+    const user = getCurrentUser(socket.id);
+    if (user) {
+      io.to(user.room).emit("showTimer");
+    } else {
+      console.log("ISSUE: showTimer coming from null user");
+    }
+  });
+
+  // deal with disconnects here later
+  // CASES:
+  //  - dealing with host's disconnection
+  //  - dealing with PC's disconnection and joining back - use cookies I guess
+  socket.on("disconnect", (reason) => {
+    let user = getCurrentUser(socket.id);
    
-   <body>
-      <div id = "sse">
-         <a href = "javascript:WebSocketTest()">Run WebSocket</a>
-      </div>
-      
-   </body>
-</html>
+    if (user) {
+      // Tell the host that a user got disconnected
+      io.to(user.room).emit("userDisconnect", user);
+
+      // tell everyone if the disconnected user was a host
+      if (wasHost(user)) {
+        io.to(user.room).emit("HostDisconnected", user);
+      }
+    }
+
+    // logging
+    user = userLeave(socket.id);
+    console.log(
+      "userDisconnected: ",
+      user,
+      "from room:",
+      user ? user.room : null
+    );
+    console.log("reason:", reason);
+   
+  });
+});
+
+app.use(express.static(path.join(__dirname + "/landing")));
+
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname + "/landing/index.html"));
+});
+
+// All files are served from build folder which gets generated
+// when frontend code is built
+app.use(express.static(path.join(__dirname + "/build")));
+
+// This index.html is the game's main page and not web's landing page
+app.get("/game/*", (req, res) => {
+  res.sendFile(__dirname + "/build/index.html");
+});
+
+let port = process.env.PORT || 8443;
+server.listen(port, (req, res) => {
+  console.log("listening on port", port);
+});
