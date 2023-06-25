@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytiq2.0</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.css">
+
+   
+</head>
+<body class="auth">
+    <div id="wrapper">
+        <div class="auth-wrapper">
+            <figure class="logo"><img src="images/logo.png" alt=""></figure>
+            
+            <div class="register">
+                <h2>PLEASE FILL IN YOUR DETAILS TO Register</h2>
+                <form class="form">
+                    <div class="item">
+                        <input type="text" id="empCode" placeholder="Enter Employee Code*">
+                    </div>
+                    <div class="item">
+                        <input type="email" id="email" placeholder="Enter E-mail ID*">
+                    </div>
+                    <div class="item">
+                       <input type="text" id="phone" placeholder="Enter Mobile Number*" oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');" maxlength="10">
+                    </div>
+                    <div class="item">
+                        <input type="password" id="password" placeholder="Enter Password*">
+                    </div>
+                    <div class="btn-wrapper">
+                        <button type="button" onclick="register()" class="btn">Register</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="sep"></div>
+            <div class="login">
+                <h2>If already registered, please login</h2>
+                <form class="form">
+                    <div class="item">
+                        <input type="text" placeholder="Enter Employee Code*" id="empCode2">
+                    </div>
+                    <div class="item">
+                        <input type="password" placeholder="Enter Registered Password*" id="password2">
+                    </div>
+                    <div class="btn-wrapper">
+                        <button type="button" onclick="login()" class="btn">Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-confirm/3.3.2/jquery-confirm.min.js"></script>
+    <script src="js/jquery.LoadingBox.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
