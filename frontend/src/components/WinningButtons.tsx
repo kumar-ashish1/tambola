@@ -24,8 +24,8 @@ class WinningButtons extends Component<
         <button
           key={i}
           onClick={() => {
-            console.log(this.props.awards[i].nameAward)
-          //  this.props.winCallBack(this.props.awards[i].nameAward);
+           // console.log(this.props.awards[i].nameAward)
+            this.props.winCallBack(this.props.awards[i].nameAward);
           }}
         >
           {this.props.awards[i].nameAward}
