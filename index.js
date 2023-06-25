@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const https = require("https");
+const https = require("http");
 const express = require("express");
 
 const {
@@ -25,7 +25,9 @@ const sslConfig = {
 };
 
 const app = express();
-const server = https.createServer(sslConfig,app);
+// const server = https.createServer(sslConfig,app);
+const server = https.createServer(app);
+
 var io = require("socket.io")(server, { pingTimeout: 240000 });
 
 io.on("connection", (socket) => {
